@@ -13,6 +13,10 @@ permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   bakeHTML:
     runs-on: ubuntu-latest
@@ -69,7 +73,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        ref: main
+        ref: ${{ github.sha }}
         fetch-depth: 0
 
     - name: Set filename
@@ -133,7 +137,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        ref: main
+        ref: ${{ github.sha }}
         fetch-depth: 0
 
     - name: Set filename
@@ -186,7 +190,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Calculate Container Metadata
@@ -196,6 +200,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=edge,branch=main
+            type=sha,format=short,prefix=sha-
             type=ref,event=tag
 
       - name: Setup QEMU
@@ -235,7 +240,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        ref: main
+        ref: ${{ github.sha }}
         fetch-depth: 0
     
     - name: Add MSBuild to PATH
