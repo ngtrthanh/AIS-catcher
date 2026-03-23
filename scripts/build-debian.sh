@@ -61,16 +61,41 @@ readonly BUILD_DEPS=(
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 error() { log "ERROR: $*"; exit 1; }
 
+run_apt_retry() {
+    local cmd=("$@")
+    local attempts=3
+    local delay=5
+    local i
+
+    for ((i = 1; i <= attempts; i++)); do
+        if "${cmd[@]}"; then
+            return 0
+        fi
+
+        if [[ $i -lt $attempts ]]; then
+            log "APT command failed (attempt ${i}/${attempts}), retrying in ${delay}s: ${cmd[*]}"
+            sleep "${delay}"
+        fi
+    done
+
+    return 1
+}
+
 install_build_deps() {
     log "Installing build dependencies..."
     export DEBIAN_FRONTEND=noninteractive
+    local apt_opts=(
+        -o Acquire::Retries=5
+        -o Acquire::http::Timeout=30
+        -o Acquire::https::Timeout=30
+    )
     
     if [[ $EUID -eq 0 ]]; then
-        apt-get update -qq
-        apt-get install -y -qq "${BUILD_DEPS[@]}"
+        run_apt_retry apt-get "${apt_opts[@]}" update -qq
+        run_apt_retry apt-get "${apt_opts[@]}" install -y -qq --fix-missing "${BUILD_DEPS[@]}"
     else
-        sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${BUILD_DEPS[@]}"
+        run_apt_retry sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_opts[@]}" update -qq
+        run_apt_retry sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_opts[@]}" install -y -qq --fix-missing "${BUILD_DEPS[@]}"
     fi
 }
 
