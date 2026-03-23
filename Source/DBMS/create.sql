@@ -18,7 +18,8 @@ CREATE TABLE ais_message (
     type smallint,
     channel character(1),
     signal_level real,
-    ppm real
+    ppm real,
+    CONSTRAINT ais_message_unique_event UNIQUE (station_id, mmsi, received_at, type, channel)
 );
 
 CREATE TABLE ais_nmea (
@@ -26,7 +27,8 @@ CREATE TABLE ais_nmea (
     received_at timestamp,
     station_id smallint,
     msg_id integer references ais_message(id) ON DELETE SET NULL,
-    nmea varchar(80)
+    nmea varchar(80),
+    CONSTRAINT ais_nmea_unique_message UNIQUE (msg_id, nmea)
 );
 
 CREATE TABLE ais_basestation (
@@ -35,7 +37,8 @@ CREATE TABLE ais_basestation (
     station_id smallint,
     msg_id integer references ais_message(id) ON DELETE SET NULL,
     lat real,
-    lon real
+    lon real,
+    CONSTRAINT ais_basestation_unique_message UNIQUE (msg_id)
 );
 
 CREATE TABLE ais_sar_position (
@@ -47,7 +50,8 @@ CREATE TABLE ais_sar_position (
     speed smallint,
     lat real,
     lon real,
-    course smallint
+    course smallint,
+    CONSTRAINT ais_sar_position_unique_message UNIQUE (msg_id)
 );
 
 CREATE TABLE ais_aton (
@@ -62,7 +66,8 @@ CREATE TABLE ais_aton (
     to_bow smallint,
     to_stern smallint,
     to_port smallint,
-    to_starboard smallint
+    to_starboard smallint,
+    CONSTRAINT ais_aton_unique_message UNIQUE (msg_id)
 );
 
 CREATE TABLE ais_vessel_pos (
@@ -76,7 +81,8 @@ CREATE TABLE ais_vessel_pos (
     lat real,
     lon real,
     course real,
-    heading real
+    heading real,
+    CONSTRAINT ais_vessel_pos_unique_message UNIQUE (msg_id)
 );
 
 CREATE TABLE ais_vessel_static (
@@ -94,7 +100,8 @@ CREATE TABLE ais_vessel_static (
     to_starboard smallint,
     eta varchar(12),
     draught real,
-    destination varchar(20)
+    destination varchar(20),
+    CONSTRAINT ais_vessel_static_unique_message UNIQUE (msg_id)
 );
 
 CREATE TABLE ais_vessel (
@@ -137,7 +144,8 @@ CREATE TABLE ais_keys (
 CREATE TABLE ais_property (
     msg_id integer references ais_message(id),
     key integer references ais_keys(key_id),
-    value varchar(20)
+    value varchar(20),
+    CONSTRAINT ais_property_unique_message UNIQUE (msg_id, key, value)
 );
 
 /*

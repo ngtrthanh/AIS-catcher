@@ -16,10 +16,12 @@
 */
 
 #pragma once
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <thread>
+#include <unordered_set>
 
 #ifdef HASPSQL
 #include <libpq-fe.h>
@@ -72,10 +74,15 @@ namespace IO
 		std::thread run_thread;
 
 		std::mutex queue_mutex;
+		std::deque<std::string> recent_messages_order;
+		std::unordered_set<std::string> recent_messages_set;
+		static constexpr std::size_t RECENT_MESSAGE_LIMIT = 4096;
 
 		int INTERVAL = 10;
 #ifdef HASPSQL
 		void post();
+		std::string makeMessageFingerprint(const AIS::Message *msg, int resolved_station_id) const;
+		bool isDuplicateMessage(const AIS::Message *msg, int resolved_station_id);
 #endif
 	public:
 		PostgreSQL() : builder(&AIS::KeyMap, JSON_DICT_FULL) { fmt = MessageFormat::JSON_FULL; }

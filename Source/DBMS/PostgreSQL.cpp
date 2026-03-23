@@ -17,11 +17,46 @@
 
 #include "AIS-catcher.h"
 #include "DBMS/PostgreSQL.h"
+#include <sstream>
 
 namespace IO
 {
 
 #ifdef HASPSQL
+	std::string PostgreSQL::makeMessageFingerprint(const AIS::Message *msg, int resolved_station_id) const
+	{
+		std::ostringstream key;
+		key << resolved_station_id << '|'
+			<< msg->mmsi() << '|'
+			<< msg->type() << '|'
+			<< msg->getRxTimeUnix() << '|'
+			<< msg->getChannel();
+
+		for (const auto &sentence : msg->NMEA)
+			key << '|' << sentence;
+
+		return key.str();
+	}
+
+	bool PostgreSQL::isDuplicateMessage(const AIS::Message *msg, int resolved_station_id)
+	{
+		const std::string fingerprint = makeMessageFingerprint(msg, resolved_station_id);
+
+		if (recent_messages_set.find(fingerprint) != recent_messages_set.end())
+			return true;
+
+		recent_messages_order.push_back(fingerprint);
+		recent_messages_set.insert(fingerprint);
+
+		if (recent_messages_order.size() > RECENT_MESSAGE_LIMIT)
+		{
+			recent_messages_set.erase(recent_messages_order.front());
+			recent_messages_order.pop_front();
+		}
+
+		return false;
+	}
+
 	void PostgreSQL::post()
 	{
 
@@ -212,7 +247,7 @@ namespace IO
 		values += m + ',' + s;
 		values += ",\'" + Util::Convert::toTimestampStr(msg->getRxTimeUnix()) + '\'';
 
-		return "\tINSERT INTO ais_vessel_pos (" + keys + ") VALUES (" + values + ");\n";
+		return "\tINSERT INTO ais_vessel_pos (" + keys + ") VALUES (" + values + ") ON CONFLICT DO NOTHING;\n";
 	}
 
 	std::string PostgreSQL::addVessel(const JSON::JSON *data, const AIS::Message *msg, const std::string &m, const std::string &s)
@@ -322,7 +357,7 @@ namespace IO
 		values += m + ',' + s;
 		values += ",\'" + Util::Convert::toTimestampStr(msg->getRxTimeUnix()) + '\'';
 
-		return "\tINSERT INTO ais_vessel_static (" + keys + ") VALUES (" + values + ");\n";
+		return "\tINSERT INTO ais_vessel_static (" + keys + ") VALUES (" + values + ") ON CONFLICT DO NOTHING;\n";
 	}
 
 	std::string PostgreSQL::addBasestation(const JSON::JSON *data, const AIS::Message *msg, const std::string &m, const std::string &s)
@@ -352,7 +387,7 @@ namespace IO
 		values += m + ',' + s;
 		values += ",\'" + Util::Convert::toTimestampStr(msg->getRxTimeUnix()) + '\'';
 
-		return "\tINSERT INTO ais_basestation (" + keys + ") VALUES (" + values + ");\n";
+		return "\tINSERT INTO ais_basestation (" + keys + ") VALUES (" + values + ") ON CONFLICT DO NOTHING;\n";
 	}
 
 	std::string PostgreSQL::addSARposition(const JSON::JSON *data, const AIS::Message *msg, const std::string &m, const std::string &s)
@@ -385,7 +420,7 @@ namespace IO
 		values += m + ',' + s;
 		values += ",\'" + Util::Convert::toTimestampStr(msg->getRxTimeUnix()) + '\'';
 
-		return "\tINSERT INTO ais_sar_position (" + keys + ") VALUES (" + values + ");\n";
+		return "\tINSERT INTO ais_sar_position (" + keys + ") VALUES (" + values + ") ON CONFLICT DO NOTHING;\n";
 	}
 
 	std::string PostgreSQL::addATON(const JSON::JSON *data, const AIS::Message *msg, const std::string &m, const std::string &s)
@@ -426,7 +461,7 @@ namespace IO
 		values += m + ',' + s;
 		values += ",\'" + Util::Convert::toTimestampStr(msg->getRxTimeUnix()) + '\'';
 
-		return "\tINSERT INTO ais_aton (" + keys + ") VALUES (" + values + ");\n";
+		return "\tINSERT INTO ais_aton (" + keys + ") VALUES (" + values + ") ON CONFLICT DO NOTHING;\n";
 	}
 
 	void PostgreSQL::Receive(const JSON::JSON *data, int len, TAG &tag)
@@ -444,15 +479,19 @@ namespace IO
 		if (!filter.include(*msg))
 			return;
 
+		const int resolved_station_id = station_id ? station_id : msg->getStation();
+		if (isDuplicateMessage(msg, resolved_station_id))
+			return;
+
 		std::string m_id = MSGS ? "m_id" : " NULL";
-		std::string s_id = std::to_string(station_id ? station_id : msg->getStation());
+		std::string s_id = std::to_string(resolved_station_id);
 
 		if (MSGS)
 		{
 			sql << "\tINSERT INTO ais_message (mmsi, station_id, type, received_at,channel, signal_level, ppm) "
 				<< "VALUES (" << msg->mmsi() << ',' + s_id << ',' << msg->type() << ",\'" << Util::Convert::toTimestampStr(msg->getRxTimeUnix()) << "\',\'"
 				<< (char)msg->getChannel() << "\'," << tag.level << ',' << tag.ppm
-				<< ") RETURNING id INTO m_id;\n";
+				<< ") ON CONFLICT (station_id, mmsi, received_at, type, channel) DO UPDATE SET published_at = ais_message.published_at RETURNING id INTO m_id;\n";
 		}
 
 		if (NMEA)
@@ -460,7 +499,7 @@ namespace IO
 			for (auto s : msg->NMEA)
 			{
 
-				sql << "\tINSERT INTO ais_nmea (msg_id,station_id,mmsi,received_at,nmea) VALUES (" << m_id << ',' << s_id << ',' << msg->mmsi() << ",\'" << Util::Convert::toTimestampStr(msg->getRxTimeUnix()) << "\',\'" << s << "\');\n";
+				sql << "\tINSERT INTO ais_nmea (msg_id,station_id,mmsi,received_at,nmea) VALUES (" << m_id << ',' << s_id << ',' << msg->mmsi() << ",\'" << Util::Convert::toTimestampStr(msg->getRxTimeUnix()) << "\',\'" << s << "\') ON CONFLICT DO NOTHING;\n";
 			}
 		}
 
