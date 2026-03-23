@@ -9,6 +9,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   bakeHTML:
     runs-on: ubuntu-latest
@@ -99,7 +103,11 @@ jobs:
         mv output/ais-catcher.deb ${{ env.filename }}
 
     - name: Upload to release
-      run: gh release upload 'Edge' ${{ env.filename }} --repo ${{ github.repository }} --clobber
+      if: github.event_name != 'pull_request'
+      run: |
+        gh release view 'Edge' --repo ${{ github.repository }} >/dev/null 2>&1 || \
+        gh release create 'Edge' --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Edge' --notes 'Rolling edge build artifacts'
+        gh release upload 'Edge' ${{ env.filename }} --repo ${{ github.repository }} --clobber
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -159,7 +167,11 @@ jobs:
         mv output/ais-catcher.deb ${{ env.filename }}
 
     - name: Upload to release
-      run: gh release upload 'Edge' ${{ env.filename }} --repo ${{ github.repository }} --clobber
+      if: github.event_name != 'pull_request'
+      run: |
+        gh release view 'Edge' --repo ${{ github.repository }} >/dev/null 2>&1 || \
+        gh release create 'Edge' --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Edge' --notes 'Rolling edge build artifacts'
+        gh release upload 'Edge' ${{ env.filename }} --repo ${{ github.repository }} --clobber
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -344,7 +356,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         Compress-Archive -Path output/* -DestinationPath "output/AIS-catcher ${{matrix.platform}}.zip"
-        bash -c "gh release upload 'Edge' './output/AIS-catcher ${{matrix.platform}}.zip' --repo ${{ github.repository }} --clobber"
+        if ('${{ github.event_name }}' -ne 'pull_request') {
+          bash -c "gh release view 'Edge' --repo ${{ github.repository }} >/dev/null 2>&1 || gh release create 'Edge' --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Edge' --notes 'Rolling edge build artifacts'"
+          bash -c "gh release upload 'Edge' './output/AIS-catcher ${{matrix.platform}}.zip' --repo ${{ github.repository }} --clobber"
+        }
         del "output\AIS-catcher ${{matrix.platform}}.zip"
 
     - name: Download SDRPlay API
@@ -386,5 +401,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         Compress-Archive -Path output/* -DestinationPath "output/AIS-catcher SDRPLAY ${{matrix.platform}}.zip"
-        bash -c "gh release upload 'Edge' './output/AIS-catcher SDRPLAY ${{matrix.platform}}.zip' --repo ${{ github.repository }} --clobber"
+        if ('${{ github.event_name }}' -ne 'pull_request') {
+          bash -c "gh release view 'Edge' --repo ${{ github.repository }} >/dev/null 2>&1 || gh release create 'Edge' --repo ${{ github.repository }} --target ${{ github.sha }} --title 'Edge' --notes 'Rolling edge build artifacts'"
+          bash -c "gh release upload 'Edge' './output/AIS-catcher SDRPLAY ${{matrix.platform}}.zip' --repo ${{ github.repository }} --clobber"
+        }
         del "output\AIS-catcher SDRPLAY ${{matrix.platform}}.zip"
