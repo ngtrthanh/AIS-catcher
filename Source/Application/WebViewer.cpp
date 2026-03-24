@@ -236,6 +236,56 @@ void WebViewer::addFileSystemTilesSource(const std::string &directoryPath, bool 
 	}
 }
 
+bool WebViewer::isRouteEnabled(const std::string &r) const
+{
+	if (r == "/" || r == "/custom/plugins.js" || r == "/custom/config.css" || r == "/about.md")
+		return api_frontend;
+
+	if (r.rfind("/cdn/", 0) == 0)
+		return api_frontend;
+
+	if (r == "/api/stat.json" || r == "/stat.json")
+		return api_stats;
+
+	if (r == "/api/ships.json" || r == "/ships.json" || r == "/api/ships_array.json" || r == "/api/ships_full.json")
+		return api_ships;
+
+	if (r == "/api/planes_array.json")
+		return api_planes;
+
+	if (r == "/sb" || r == "/api/binmsgs.json")
+		return api_binary;
+
+	if (r == "/api/sse" || r == "/api/signal" || r == "/api/log")
+		return api_stream;
+
+	if (r == "/api/path.json" || r == "/api/allpath.json" || r == "/api/path.geojson" || r == "/api/allpath.geojson")
+		return api_paths;
+
+	if (r == "/api/decode")
+		return api_decode;
+
+	if (r == "/api/message" || r == "/api/vessel")
+		return api_vessel;
+
+	if (r == "/api/history_full.json")
+		return api_history;
+
+	if (r.rfind("/tiles", 0) == 0)
+		return api_tiles;
+
+	if (r == "/metrics")
+		return api_metrics;
+
+	if (r == "/kml")
+		return api_kml;
+
+	if (r == "/geojson" || r == "/allpath.geojson")
+		return api_geojson;
+
+	return !api_only;
+}
+
 bool WebViewer::Save()
 {
 	try
@@ -595,24 +645,10 @@ void WebViewer::Request(IO::TCPServerConnection &c, const std::string &response,
 			r = "/index_local.html";
 	}
 
-	if (api_only)
+	if (!isRouteEnabled(r))
 	{
-		const bool allowed_route =
-			r.rfind("/api/", 0) == 0 ||
-			r == "/metrics" ||
-			r == "/kml" ||
-			r == "/geojson" ||
-			r == "/allpath.geojson" ||
-			r == "/sb" ||
-			r == "/stat.json" ||
-			r == "/ships.json" ||
-			r.rfind("/tiles", 0) == 0;
-
-		if (!allowed_route)
-		{
-			HTTPServer::Request(c, r, false);
-			return;
-		}
+		HTTPServer::Request(c, r, false);
+		return;
 	}
 
 	if (!cdn.empty() && r.find("/cdn/") == 0)
@@ -1022,6 +1058,64 @@ Setting &WebViewer::Set(std::string option, std::string arg)
 	else if (option == "API_ONLY")
 	{
 		api_only = Util::Parse::Switch(arg);
+		if (api_only)
+			api_frontend = false;
+	}
+	else if (option == "API_FRONTEND")
+	{
+		api_frontend = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_STATS")
+	{
+		api_stats = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_SHIPS")
+	{
+		api_ships = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_PLANES")
+	{
+		api_planes = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_BINARY")
+	{
+		api_binary = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_STREAM")
+	{
+		api_stream = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_PATHS")
+	{
+		api_paths = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_DECODE")
+	{
+		api_decode = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_VESSEL")
+	{
+		api_vessel = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_HISTORY")
+	{
+		api_history = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_TILES")
+	{
+		api_tiles = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_METRICS")
+	{
+		api_metrics = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_KML")
+	{
+		api_kml = Util::Parse::Switch(arg);
+	}
+	else if (option == "API_GEOJSON")
+	{
+		api_geojson = Util::Parse::Switch(arg);
 	}
 	else if (option == "GROUPS_IN")
 	{

@@ -108,6 +108,20 @@ class WebViewer : public IO::HTTPServer, public Setting
 	bool thread_running = false;
 	bool aboutPresent = false;
 	bool api_only = false;
+	bool api_frontend = true;
+	bool api_stats = true;
+	bool api_ships = true;
+	bool api_planes = true;
+	bool api_binary = true;
+	bool api_stream = true;
+	bool api_paths = true;
+	bool api_decode = true;
+	bool api_vessel = true;
+	bool api_history = true;
+	bool api_tiles = true;
+	bool api_metrics = true;
+	bool api_kml = true;
+	bool api_geojson = true;
 
 	std::vector<char> binary;
 	std::vector<std::shared_ptr<MapTiles>> mapSources;
@@ -157,6 +171,7 @@ class WebViewer : public IO::HTTPServer, public Setting
 	bool parseMBTilesURL(const std::string &url, std::string &layerID, int &z, int &x, int &y);
 	void addMBTilesSource(const std::string &filepath, bool overlay);
 	void addFileSystemTilesSource(const std::string &directoryPath, bool overlay);
+	bool isRouteEnabled(const std::string &route) const;
 
 	// NMEA decoder utility
 	static std::string decodeNMEAtoJSON(const std::string &nmea_input, bool enhanced = true);

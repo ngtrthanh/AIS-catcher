@@ -47,7 +47,25 @@ Examples:
 - `-N 8100 CORS on`
 - `-N 8100 CORS off`
 - `-N 8100 API_ONLY on CORS on`
+- `-N 8100 API_ONLY on CORS on API_STATS on API_SHIPS on API_STREAM on API_DECODE off`
 
 `CORS on` keeps the `Access-Control-Allow-Origin: *` response header. `CORS off` disables that header.
 `API_ONLY on` disables the bundled frontend and other static web routes so the built-in web server exposes backend endpoints only. This is useful when hosting a decoupled frontend on Cloudflare Pages or another external origin.
+
+Available endpoint switches:
+
+- `API_FRONTEND` controls `/`, bundled files, `/custom/plugins.js`, `/custom/config.css`, `/about.md`, and `/cdn/*`
+- `API_STATS` controls `/api/stat.json` and `/stat.json`
+- `API_SHIPS` controls `/api/ships.json`, `/ships.json`, `/api/ships_array.json`, and `/api/ships_full.json`
+- `API_PLANES` controls `/api/planes_array.json`
+- `API_BINARY` controls `/sb` and `/api/binmsgs.json`
+- `API_STREAM` controls `/api/sse`, `/api/signal`, and `/api/log`
+- `API_PATHS` controls `/api/path.json`, `/api/allpath.json`, `/api/path.geojson`, and `/api/allpath.geojson`
+- `API_DECODE` controls `/api/decode`
+- `API_VESSEL` controls `/api/message` and `/api/vessel`
+- `API_HISTORY` controls `/api/history_full.json`
+- `API_TILES` controls `/tiles/*`
+- `API_METRICS` controls `/metrics`
+- `API_KML` controls `/kml`
+- `API_GEOJSON` controls `/geojson` and `/allpath.geojson`
 
