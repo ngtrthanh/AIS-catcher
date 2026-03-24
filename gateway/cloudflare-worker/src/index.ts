@@ -16,6 +16,10 @@ type ExecutionContextLike = {
   waitUntil(promise: Promise<unknown>): void;
 };
 
+type DefaultCacheStorage = CacheStorage & {
+  default: Cache;
+};
+
 type RouteMatch = {
   pathname: {
     groups: Record<string, string>;
@@ -77,6 +81,7 @@ type AuthContext = {
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" };
 const URLPatternCtor = (globalThis as unknown as { URLPattern: new (init: { pathname: string }) => RoutePattern }).URLPattern;
+const defaultCache = (caches as DefaultCacheStorage).default;
 
 function makePattern(pathname: string): RoutePattern {
   return new URLPatternCtor({ pathname });
@@ -306,7 +311,7 @@ async function proxyToOrigin(
   const cacheKey = makeCacheKey(request, auth, route);
 
   if (request.method === "GET" && cacheTtl > 0) {
-    const cached = await caches.default.match(cacheKey);
+    const cached = await defaultCache.match(cacheKey);
     if (cached)
       return appendGatewayHeaders(cached, auth, "HIT");
   }
@@ -326,7 +331,7 @@ async function proxyToOrigin(
 
   if (request.method === "GET" && cacheTtl > 0 && upstreamResponse.ok) {
     response.headers.set("cache-control", `public, max-age=${cacheTtl}`);
-    ctx.waitUntil(caches.default.put(cacheKey, response.clone()));
+    ctx.waitUntil(defaultCache.put(cacheKey, response.clone()));
     return appendGatewayHeaders(response, auth, "MISS");
   }
 
