@@ -6,6 +6,7 @@ on:
       - 'main'
       - 'feature/webviewer-cors-switch'
       - 'feature/api-only-backend'
+      - 'feature/cf-api-gateway'
     tags:
       - '*'
   pull_request:

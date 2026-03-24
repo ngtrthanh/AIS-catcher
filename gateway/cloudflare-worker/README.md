@@ -78,6 +78,28 @@ npm run dev
 
 Set local secrets/vars with Wrangler before deploying.
 
+## Simple deploy
+
+Local command line:
+
+```bash
+cd gateway/cloudflare-worker
+npm install
+npm run deploy
+```
+
+One-button GitHub deploy:
+
+- set repository secrets:
+  - `CLOUDFLARE_API_TOKEN`
+  - `CLOUDFLARE_ACCOUNT_ID`
+  - `AIS_API_BASE_URL`
+  - `ALLOWED_ORIGINS`
+  - `TIER_CONFIG_JSON`
+  - `API_KEYS_JSON`
+- open the `Gateway Worker` GitHub Actions workflow
+- run `workflow_dispatch` with `deploy=true`
+
 ## Cloudflare Pages frontend pattern
 
 Frontend:
@@ -96,4 +118,3 @@ Backend:
 
 - AIS-catcher only
 - private network origin
-

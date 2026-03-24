@@ -1,0 +1,55 @@
+name: Gateway Worker
+
+on:
+  push:
+    branches:
+      - 'feature/cf-api-gateway'
+    paths:
+      - 'gateway/cloudflare-worker/**'
+      - '.github/workflows/gateway-worker.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy the Cloudflare Worker'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway/cloudflare-worker
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gateway/cloudflare-worker/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Deploy Worker
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AIS_API_BASE_URL: ${{ secrets.AIS_API_BASE_URL }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          TIER_CONFIG_JSON: ${{ secrets.TIER_CONFIG_JSON }}
+          API_KEYS_JSON: ${{ secrets.API_KEYS_JSON }}
+        run: npx wrangler deploy
