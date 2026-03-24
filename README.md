@@ -38,3 +38,14 @@ To join, ensure you're on the latest version, visit [www.aiscatcher.org](https:/
 - Forum: [here](https://github.com/jvde-github/AIS-catcher/discussions)
 - Bug Reports: [here](https://github.com/jvde-github/AIS-catcher/issues)
 
+## Web Server
+
+The built-in web server started with `-N` accepts additional `OPTION VALUE` pairs after the port.
+
+Examples:
+
+- `-N 8100 CORS on`
+- `-N 8100 CORS off`
+
+`CORS on` keeps the `Access-Control-Allow-Origin: *` response header. `CORS off` disables that header.
+
