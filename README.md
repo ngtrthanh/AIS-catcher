@@ -46,6 +46,8 @@ Examples:
 
 - `-N 8100 CORS on`
 - `-N 8100 CORS off`
+- `-N 8100 API_ONLY on CORS on`
 
 `CORS on` keeps the `Access-Control-Allow-Origin: *` response header. `CORS off` disables that header.
+`API_ONLY on` disables the bundled frontend and other static web routes so the built-in web server exposes backend endpoints only. This is useful when hosting a decoupled frontend on Cloudflare Pages or another external origin.
 

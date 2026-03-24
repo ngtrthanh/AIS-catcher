@@ -595,6 +595,26 @@ void WebViewer::Request(IO::TCPServerConnection &c, const std::string &response,
 			r = "/index_local.html";
 	}
 
+	if (api_only)
+	{
+		const bool allowed_route =
+			r.rfind("/api/", 0) == 0 ||
+			r == "/metrics" ||
+			r == "/kml" ||
+			r == "/geojson" ||
+			r == "/allpath.geojson" ||
+			r == "/sb" ||
+			r == "/stat.json" ||
+			r == "/ships.json" ||
+			r.rfind("/tiles", 0) == 0;
+
+		if (!allowed_route)
+		{
+			HTTPServer::Request(c, r, false);
+			return;
+		}
+	}
+
 	if (!cdn.empty() && r.find("/cdn/") == 0)
 	{
 		try
@@ -998,6 +1018,10 @@ Setting &WebViewer::Set(std::string option, std::string arg)
 	else if (option == "CORS")
 	{
 		setCORS(Util::Parse::Switch(arg));
+	}
+	else if (option == "API_ONLY")
+	{
+		api_only = Util::Parse::Switch(arg);
 	}
 	else if (option == "GROUPS_IN")
 	{

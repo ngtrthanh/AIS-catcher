@@ -107,6 +107,7 @@ class WebViewer : public IO::HTTPServer, public Setting
 	bool supportPrometheus = false;
 	bool thread_running = false;
 	bool aboutPresent = false;
+	bool api_only = false;
 
 	std::vector<char> binary;
 	std::vector<std::shared_ptr<MapTiles>> mapSources;
