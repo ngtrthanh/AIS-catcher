@@ -37,6 +37,7 @@ To join, ensure you're on the latest version, visit [www.aiscatcher.org](https:/
 - What is New? [here](https://jvde-github.github.io/AIS-catcher-docs/what-is-new/)
 - Forum: [here](https://github.com/jvde-github/AIS-catcher/discussions)
 - Bug Reports: [here](https://github.com/jvde-github/AIS-catcher/issues)
+- Cloudflare API gateway starter: [gateway/cloudflare-worker](./gateway/cloudflare-worker/README.md)
 
 ## Web Server
 

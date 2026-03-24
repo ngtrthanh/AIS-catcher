@@ -1,0 +1,10 @@
+name = "ais-catcher-api-gateway"
+main = "src/index.ts"
+compatibility_date = "2026-03-24"
+
+[vars]
+AIS_API_BASE_URL = "http://127.0.0.1:8100"
+ALLOWED_ORIGINS = "https://example.pages.dev"
+DEFAULT_CACHE_TTL = "5"
+DEFAULT_DELAY_MS = "0"
+

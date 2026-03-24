@@ -1,0 +1,52 @@
+{
+  "tiers": {
+    "free": {
+      "allowedRoutes": ["stats", "ships_compact"],
+      "cacheTtlSeconds": 15,
+      "artificialDelayMs": 1500
+    },
+    "basic": {
+      "allowedRoutes": ["stats", "ships", "ship_detail", "paths"],
+      "cacheTtlSeconds": 5,
+      "artificialDelayMs": 250
+    },
+    "pro": {
+      "allowedRoutes": [
+        "stats",
+        "ships",
+        "ships_compact",
+        "ships_full",
+        "ship_detail",
+        "paths",
+        "path_detail",
+        "history",
+        "stream",
+        "signal_stream",
+        "decode",
+        "vessel_message"
+      ],
+      "cacheTtlSeconds": 0,
+      "artificialDelayMs": 0
+    },
+    "enterprise": {
+      "allowedRoutes": ["*"],
+      "cacheTtlSeconds": 0,
+      "artificialDelayMs": 0
+    }
+  },
+  "apiKeys": {
+    "free-demo-key": {
+      "tier": "free",
+      "tenantId": "public-demo"
+    },
+    "basic-demo-key": {
+      "tier": "basic",
+      "tenantId": "customer-basic"
+    },
+    "pro-demo-key": {
+      "tier": "pro",
+      "tenantId": "customer-pro"
+    }
+  }
+}
+
