@@ -995,6 +995,10 @@ Setting &WebViewer::Set(std::string option, std::string arg)
 	{
 		use_zlib = Util::Parse::Switch(arg);
 	}
+	else if (option == "CORS")
+	{
+		setCORS(Util::Parse::Switch(arg));
+	}
 	else if (option == "GROUPS_IN")
 	{
 		groups_in = Util::Parse::Integer(arg);

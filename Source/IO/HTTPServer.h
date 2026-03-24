@@ -114,6 +114,7 @@ class SSEConnection
 	class HTTPServer : public IO::TCPServer
 	{
 		std::array<std::string, 4> sse_topic = {"aiscatcher", "nmea", "nmea", "log"};
+		bool cors_enabled = true;
 
 	public:
 		virtual void Request(IO::TCPServerConnection &c, const std::string &msg, bool accept_gzip);
@@ -121,6 +122,8 @@ class SSEConnection
 		void Response(IO::TCPServerConnection &c, const std::string &type, const std::string &content, bool gzip = false, bool cache = false);
 		void Response(IO::TCPServerConnection &c, const std::string &type, const char *data, int len, bool gzip = false, bool cache = false);
 		void ResponseRaw(IO::TCPServerConnection &c, const std::string &type, const char *data, int len, bool gzip = false, bool cache = false);
+		void setCORS(bool enabled) { cors_enabled = enabled; }
+		bool isCORSenabled() const { return cors_enabled; }
 
 		void cleanupSSE()
 		{
