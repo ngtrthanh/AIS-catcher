@@ -12,12 +12,26 @@ type RouteId =
   | "decode"
   | "vessel_message";
 
+type ExecutionContextLike = {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
+type RouteMatch = {
+  pathname: {
+    groups: Record<string, string>;
+  };
+};
+
+type RoutePattern = {
+  exec(input: string | URL): RouteMatch | null;
+};
+
 type RouteDef = {
   id: RouteId;
   method: "GET" | "POST";
-  pattern: URLPattern;
+  pattern: RoutePattern;
   cacheable: boolean;
-  upstream: (match: URLPatternResult, request: Request) => Promise<UpstreamRequest>;
+  upstream: (match: RouteMatch, request: Request) => Promise<UpstreamRequest>;
 };
 
 type UpstreamRequest = {
@@ -62,82 +76,87 @@ type AuthContext = {
 };
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" };
+const URLPatternCtor = (globalThis as unknown as { URLPattern: new (init: { pathname: string }) => RoutePattern }).URLPattern;
+
+function makePattern(pathname: string): RoutePattern {
+  return new URLPatternCtor({ pathname });
+}
 
 const routes: RouteDef[] = [
   {
     id: "stats",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/stats" }),
+    pattern: makePattern("/v1/stats"),
     cacheable: true,
     upstream: async () => ({ path: "/api/stat.json" }),
   },
   {
     id: "ships",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/ships" }),
+    pattern: makePattern("/v1/ships"),
     cacheable: true,
     upstream: async () => ({ path: "/api/ships.json" }),
   },
   {
     id: "ships_compact",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/ships/compact" }),
+    pattern: makePattern("/v1/ships/compact"),
     cacheable: true,
     upstream: async () => ({ path: "/api/ships_array.json" }),
   },
   {
     id: "ships_full",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/ships/full" }),
+    pattern: makePattern("/v1/ships/full"),
     cacheable: false,
     upstream: async () => ({ path: "/api/ships_full.json" }),
   },
   {
     id: "ship_detail",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/ships/:mmsi" }),
+    pattern: makePattern("/v1/ships/:mmsi"),
     cacheable: true,
     upstream: async (match) => ({ path: `/api/vessel?${match.pathname.groups.mmsi}` }),
   },
   {
     id: "paths",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/paths" }),
+    pattern: makePattern("/v1/paths"),
     cacheable: false,
     upstream: async () => ({ path: "/api/allpath.geojson" }),
   },
   {
     id: "path_detail",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/paths/:mmsi" }),
+    pattern: makePattern("/v1/paths/:mmsi"),
     cacheable: true,
     upstream: async (match) => ({ path: `/api/path.geojson?${match.pathname.groups.mmsi}` }),
   },
   {
     id: "history",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/history" }),
+    pattern: makePattern("/v1/history"),
     cacheable: true,
     upstream: async () => ({ path: "/api/history_full.json" }),
   },
   {
     id: "stream",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/stream" }),
+    pattern: makePattern("/v1/stream"),
     cacheable: false,
     upstream: async () => ({ path: "/api/sse" }),
   },
   {
     id: "signal_stream",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/signal-stream" }),
+    pattern: makePattern("/v1/signal-stream"),
     cacheable: false,
     upstream: async () => ({ path: "/api/signal" }),
   },
   {
     id: "decode",
     method: "POST",
-    pattern: new URLPattern({ pathname: "/v1/decode" }),
+    pattern: makePattern("/v1/decode"),
     cacheable: false,
     upstream: async (_match, request) => {
       const contentType = request.headers.get("content-type") ?? "";
@@ -156,14 +175,14 @@ const routes: RouteDef[] = [
   {
     id: "vessel_message",
     method: "GET",
-    pattern: new URLPattern({ pathname: "/v1/messages/:mmsi" }),
+    pattern: makePattern("/v1/messages/:mmsi"),
     cacheable: true,
     upstream: async (match) => ({ path: `/api/message?${match.pathname.groups.mmsi}` }),
   },
 ];
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContextLike): Promise<Response> {
     if (request.method === "OPTIONS")
       return handleOptions(request, env);
 
@@ -194,7 +213,7 @@ export default {
   },
 };
 
-function resolveRoute(request: Request, url: URL): { route: RouteDef; match: URLPatternResult } | null {
+function resolveRoute(request: Request, url: URL): { route: RouteDef; match: RouteMatch } | null {
   for (const route of routes) {
     if (route.method !== request.method)
       continue;
@@ -280,7 +299,7 @@ async function proxyToOrigin(
   route: RouteDef,
   upstreamRequest: UpstreamRequest,
   auth: AuthContext,
-  ctx: ExecutionContext,
+  ctx: ExecutionContextLike,
 ): Promise<Response> {
   const originUrl = new URL(upstreamRequest.path, ensureTrailingSlash(env.AIS_API_BASE_URL));
   const cacheTtl = route.cacheable ? auth.tier.cacheTtlSeconds ?? parseInteger(env.DEFAULT_CACHE_TTL, 0) : 0;
