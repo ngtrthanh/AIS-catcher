@@ -5,6 +5,7 @@ on:
     branches:
       - 'main'
       - 'feature/webviewer-cors-switch'
+      - 'feature/api-only-backend'
     tags:
       - '*'
   pull_request:
@@ -253,6 +254,12 @@ jobs:
     - name: Restore vcpkg packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: vcpkg integrate install
+
+    - name: Refresh vcpkg ports
+      run: |
+        git -C C:\vcpkg pull
+        & C:\vcpkg\bootstrap-vcpkg.bat
+        vcpkg update
        
     - name: Install vcpkg packages
       working-directory: ${{env.GITHUB_WORKSPACE}}
