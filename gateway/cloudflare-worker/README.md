@@ -1,27 +1,27 @@
-# AIS-catcher API Gateway
+# AIS-catcher Commercial API Gateway
 
-This is a Cloudflare Worker starter that sits in front of an `AIS-catcher` instance running in backend-only mode.
+This Worker is the commercial API layer for an `AIS-catcher` backend running in API-only mode.
 
-## Purpose
+It gives you:
 
-- expose a clean `/v1/*` public API
-- authenticate callers with API keys
-- assign each key to a tier
-- allow or deny routes per tier
-- add per-tier cache and delay behavior
-- keep the raw `AIS-catcher` origin private
+- public `/v1/*` routes for customers
+- per-customer API keys
+- plan-based endpoint access
+- usage logging in Cloudflare D1
+- admin endpoints for issuing keys and invoices
+- optional Stripe invoice creation
 
-## Recommended AIS-catcher origin mode
+## Backend mode
 
-Run AIS-catcher with only the backend routes you need:
+Run `AIS-catcher` as a private backend origin:
 
 ```txt
 -N 8100 API_ONLY on CORS off API_FRONTEND off API_STATS on API_SHIPS on API_STREAM on API_PATHS on API_HISTORY on API_VESSEL on API_DECODE off
 ```
 
-The Worker should be the only public entrypoint. Cloudflare Pages can call the Worker, not the AIS-catcher origin directly.
+The Worker should be the only public entrypoint. Do not expose the raw `AIS-catcher` origin to customers.
 
-## Public routes
+## Public API routes
 
 - `GET /v1/stats`
 - `GET /v1/ships`
@@ -36,51 +36,169 @@ The Worker should be the only public entrypoint. Cloudflare Pages can call the W
 - `GET /v1/messages/:mmsi`
 - `POST /v1/decode`
 
-## Config model
+## Commercial control plane
 
-You provide:
+Admin routes are served directly by the Worker and require:
+
+```txt
+Authorization: Bearer <ADMIN_API_TOKEN>
+```
+
+Available admin routes:
+
+- `GET /admin/plans`
+- `POST /admin/plans`
+- `GET /admin/orgs`
+- `POST /admin/orgs`
+- `GET /admin/api-keys?orgId=<id>`
+- `POST /admin/api-keys`
+- `GET /admin/usage?orgId=<id>&from=<iso>&to=<iso>`
+- `GET /admin/invoices?orgId=<id>`
+- `POST /admin/invoices`
+- `POST /admin/stripe/customers`
+
+## Database
+
+Apply the schema in [schema.sql](./schema.sql) to a Cloudflare D1 database.
+
+Tables:
+
+- `plans`
+- `organizations`
+- `api_keys`
+- `usage_events`
+- `invoices`
+
+`api_keys` only stores a prefix and a SHA-256 hash of the secret. The raw issued key is returned once when created.
+
+## Tomorrow-ready commercial flow
+
+1. Create a D1 database and apply `schema.sql`.
+2. Deploy the Worker with `DB`, `ADMIN_API_TOKEN`, and `AIS_API_BASE_URL`.
+3. Create a plan:
+
+```bash
+curl -X POST "$GATEWAY_URL/admin/plans" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "pro-monthly",
+    "name": "Pro Monthly",
+    "priceCents": 4900,
+    "currency": "usd",
+    "allowedRoutes": ["stats", "ships", "ship_detail", "paths", "path_detail", "history", "stream"],
+    "limits": { "cacheTtlSeconds": 0, "artificialDelayMs": 0 }
+  }'
+```
+
+4. Create the customer organization:
+
+```bash
+curl -X POST "$GATEWAY_URL/admin/orgs" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer A",
+    "billingEmail": "ops@example.com",
+    "planId": "pro-monthly"
+  }'
+```
+
+5. Optionally create the Stripe customer:
+
+```bash
+curl -X POST "$GATEWAY_URL/admin/stripe/customers" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgId": "<org-id>",
+    "name": "Customer A",
+    "email": "ops@example.com"
+  }'
+```
+
+6. Issue the API key:
+
+```bash
+curl -X POST "$GATEWAY_URL/admin/api-keys" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgId": "<org-id>",
+    "name": "production-key"
+  }'
+```
+
+7. Give the returned `issuedKey` to the customer.
+8. Pull usage with `/admin/usage`.
+9. Create an invoice:
+
+```bash
+curl -X POST "$GATEWAY_URL/admin/invoices" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orgId": "<org-id>",
+    "amountCents": 4900,
+    "currency": "usd",
+    "description": "AIS API Pro Monthly"
+  }'
+```
+
+If `STRIPE_SECRET_KEY` is configured and the org has a Stripe customer id, the Worker creates and finalizes a Stripe invoice. Otherwise it stores a local draft invoice record in D1.
+
+## Auth for customer traffic
+
+The public gateway accepts either:
+
+- `Authorization: Bearer <issued-key>`
+- `x-api-key: <issued-key>`
+
+Issued key format:
+
+```txt
+ais_xxxxxxxx.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+```
+
+## Config modes
+
+The Worker supports two modes:
+
+- commercial mode: D1-backed customers and admin APIs
+- starter mode: `TIER_CONFIG_JSON` and `API_KEYS_JSON` from environment vars
+
+If `DB` is configured, the Worker tries commercial auth first and falls back to the JSON config only when no D1 key matches.
+
+## Secrets and variables
+
+Required:
 
 - `AIS_API_BASE_URL`
 - `ALLOWED_ORIGINS`
+- `ADMIN_API_TOKEN`
+
+Commercial mode:
+
+- D1 binding `DB`
+- `STRIPE_SECRET_KEY` if you want Stripe invoice/customer creation
+
+Starter mode fallback:
+
 - `TIER_CONFIG_JSON`
 - `API_KEYS_JSON`
-
-Use [config.example.json](./config.example.json) as the source shape for the last two values.
-
-## Auth
-
-The Worker accepts either:
-
-- `Authorization: Bearer <api-key>`
-- `x-api-key: <api-key>`
-
-## Per-tier controls
-
-Each tier can define:
-
-- `allowedRoutes`
-- `cacheTtlSeconds`
-- `artificialDelayMs`
-
-This starter does not include persistent quota/rate-limit storage. For production tiers, add:
-
-- Cloudflare Durable Objects
-- Cloudflare KV plus scheduled aggregation
-- a dedicated external rate-limit store
 
 ## Local dev
 
 ```bash
 cd gateway/cloudflare-worker
 npm install
+npx wrangler d1 execute ais-catcher-gateway --local --file=./schema.sql
 npm run dev
 ```
 
-Set local secrets/vars with Wrangler before deploying.
+## Deploy
 
-## Simple deploy
-
-Local command line:
+Simple local deploy:
 
 ```bash
 cd gateway/cloudflare-worker
@@ -88,33 +206,19 @@ npm install
 npm run deploy
 ```
 
-One-button GitHub deploy:
+GitHub Actions deploy requires these repository secrets:
 
-- set repository secrets:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
-  - `AIS_API_BASE_URL`
-  - `ALLOWED_ORIGINS`
-  - `TIER_CONFIG_JSON`
-  - `API_KEYS_JSON`
-- open the `Gateway Worker` GitHub Actions workflow
-- run `workflow_dispatch` with `deploy=true`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `AIS_API_BASE_URL`
+- `ALLOWED_ORIGINS`
+- `ADMIN_API_TOKEN`
+- `STRIPE_SECRET_KEY` if used
 
-## Cloudflare Pages frontend pattern
+## Cloudflare Pages pattern
 
-Frontend:
+- Pages hosts your frontend or customer portal
+- the Worker is your public API and admin surface
+- `AIS-catcher` stays private behind the Worker
 
-- hosted on Pages
-- calls the Worker under `/api/*` or a dedicated subdomain
-
-Gateway:
-
-- validates key or session
-- rewrites to the internal AIS-catcher origin
-- filters access by tier
-- returns normalized JSON
-
-Backend:
-
-- AIS-catcher only
-- private network origin
+That gives you a clean split between ingestion, commercial policy, and billing.

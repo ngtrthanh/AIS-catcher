@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - 'feature/cf-api-gateway'
+      - 'feature/commercial-api-gateway'
     paths:
       - 'gateway/cloudflare-worker/**'
       - '.github/workflows/gateway-worker.yml'
@@ -55,4 +56,6 @@ jobs:
           ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
           TIER_CONFIG_JSON: ${{ secrets.TIER_CONFIG_JSON }}
           API_KEYS_JSON: ${{ secrets.API_KEYS_JSON }}
+          ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: npx wrangler deploy

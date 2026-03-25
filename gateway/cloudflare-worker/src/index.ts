@@ -1,3 +1,11 @@
+import {
+  authenticateCommercialKey,
+  handleAdminRequest,
+  logUsageEvent,
+  type CommercialAuthContext,
+  type CommercialEnv,
+} from "./commercial";
+
 type RouteId =
   | "stats"
   | "ships"
@@ -63,7 +71,7 @@ type TierConfigPayload = {
 
 type ApiKeysPayload = Record<string, ApiKeyDefinition>;
 
-interface Env {
+interface Env extends CommercialEnv {
   AIS_API_BASE_URL: string;
   ALLOWED_ORIGINS?: string;
   DEFAULT_CACHE_TTL?: string;
@@ -78,6 +86,8 @@ type AuthContext = {
   tenantId: string;
   tier: TierDefinition;
 };
+
+type AnyAuthContext = AuthContext | CommercialAuthContext;
 
 const jsonHeaders = { "content-type": "application/json; charset=utf-8" };
 const URLPatternCtor = (globalThis as unknown as { URLPattern: new (init: { pathname: string }) => RoutePattern }).URLPattern;
@@ -192,12 +202,16 @@ export default {
       return handleOptions(request, env);
 
     try {
+      const adminResponse = await handleAdminRequest(request, env);
+      if (adminResponse)
+        return withCors(request, env, adminResponse);
+
       const url = new URL(request.url);
       const routeMatch = resolveRoute(request, url);
       if (!routeMatch)
         return withCors(request, env, jsonResponse({ error: "Route not found" }, 404));
 
-      const auth = authenticate(request, env);
+      const auth = await authenticate(request, env);
       if (auth instanceof Response)
         return withCors(request, env, auth);
 
@@ -210,6 +224,8 @@ export default {
 
       const upstreamRequest = await routeMatch.route.upstream(routeMatch.match, request);
       const upstreamResponse = await proxyToOrigin(request, env, routeMatch.route, upstreamRequest, auth, ctx);
+      if ("apiKeyId" in auth)
+        ctx.waitUntil(logUsageEvent(env, auth, routeMatch.route.id, request.method, upstreamResponse.status));
       return withCors(request, env, upstreamResponse);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unexpected gateway error";
@@ -231,7 +247,11 @@ function resolveRoute(request: Request, url: URL): { route: RouteDef; match: Rou
   return null;
 }
 
-function authenticate(request: Request, env: Env): AuthContext | Response {
+async function authenticate(request: Request, env: Env): Promise<AnyAuthContext | Response> {
+  const commercialAuth = await authenticateCommercialKey(request, env);
+  if (commercialAuth)
+    return commercialAuth;
+
   const apiKey = getApiKey(request);
   if (!apiKey)
     return jsonResponse({ error: "Missing API key" }, 401);
@@ -303,7 +323,7 @@ async function proxyToOrigin(
   env: Env,
   route: RouteDef,
   upstreamRequest: UpstreamRequest,
-  auth: AuthContext,
+  auth: AnyAuthContext,
   ctx: ExecutionContextLike,
 ): Promise<Response> {
   const originUrl = new URL(upstreamRequest.path, ensureTrailingSlash(env.AIS_API_BASE_URL));
@@ -338,14 +358,14 @@ async function proxyToOrigin(
   return appendGatewayHeaders(response, auth, "BYPASS");
 }
 
-function makeCacheKey(request: Request, auth: AuthContext, route: RouteDef): Request {
+function makeCacheKey(request: Request, auth: AnyAuthContext, route: RouteDef): Request {
   const url = new URL(request.url);
   url.searchParams.set("__tier", auth.tierName);
   url.searchParams.set("__route", route.id);
   return new Request(url.toString(), { method: "GET" });
 }
 
-function appendGatewayHeaders(response: Response, auth: AuthContext, cacheStatus: "HIT" | "MISS" | "BYPASS"): Response {
+function appendGatewayHeaders(response: Response, auth: AnyAuthContext, cacheStatus: "HIT" | "MISS" | "BYPASS"): Response {
   const next = new Response(response.body, response);
   next.headers.set("x-ais-tier", auth.tierName);
   next.headers.set("x-ais-tenant", auth.tenantId);

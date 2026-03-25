@@ -8,3 +8,8 @@ ALLOWED_ORIGINS = "https://example.pages.dev"
 DEFAULT_CACHE_TTL = "5"
 DEFAULT_DELAY_MS = "0"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "ais-catcher-gateway"
+database_id = "replace-with-your-d1-database-id"
+
