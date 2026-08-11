@@ -20,6 +20,13 @@
 #include <thread>
 #include <mutex>
 #include <sstream>
+#include <fstream>
+#include <iomanip>
+#include <random>
+#include <cstdlib>
+#include <cctype>
+#include <ctime>
+#include <vector>
 
 #include "TemplateString.h"
 
@@ -136,6 +143,214 @@ namespace IO
 		std::string uuid;
 		bool include_sample_start = false;
 
+		// HPRadar feeder identity is transport metadata, not NMEA. For an HPR
+		// destination we send a tiny control datagram from the same UDP socket:
+		//     HPR1|<36-byte UUID>\r\n
+		// The actual AIS NMEA datagrams remain byte-for-byte unchanged.
+		long hpr_identity_last = 0;
+		long hpr_identity_epoch = -1;
+		int hpr_identity_burst = 0;
+
+		static std::string hprTrim(const std::string &value)
+		{
+			const std::string ws = " \t\r\n";
+			std::string::size_type first = value.find_first_not_of(ws);
+			if (first == std::string::npos)
+				return "";
+			std::string::size_type last = value.find_last_not_of(ws);
+			return value.substr(first, last - first + 1);
+		}
+
+		static std::string hprLower(std::string value)
+		{
+			for (std::string::size_type i = 0; i < value.size(); ++i)
+				value[i] = (char)std::tolower((unsigned char)value[i]);
+			return value;
+		}
+
+		static bool hprValidUUID(const std::string &value)
+		{
+			if (value.size() != 36)
+				return false;
+			for (std::string::size_type i = 0; i < value.size(); ++i)
+			{
+				if (i == 8 || i == 13 || i == 18 || i == 23)
+				{
+					if (value[i] != '-')
+						return false;
+				}
+				else if (!std::isxdigit((unsigned char)value[i]))
+					return false;
+			}
+			return true;
+		}
+
+		static std::string hprReadUUID(const std::string &path)
+		{
+			std::ifstream in(path.c_str());
+			if (!in.is_open())
+				return "";
+			std::string value;
+			std::getline(in, value);
+			value = hprLower(hprTrim(value));
+			return hprValidUUID(value) ? value : "";
+		}
+
+		static bool hprWriteUUID(const std::string &path, const std::string &value)
+		{
+			std::ofstream out(path.c_str(), std::ios::out | std::ios::trunc);
+			if (!out.is_open())
+				return false;
+			out << value << "\n";
+			out.flush();
+			return out.good();
+		}
+
+		static std::string hprGenerateUUID()
+		{
+			std::random_device rd;
+			unsigned char b[16];
+			for (int i = 0; i < 16; ++i)
+				b[i] = (unsigned char)(rd() & 0xff);
+			b[6] = (unsigned char)((b[6] & 0x0f) | 0x40); // RFC 4122 version 4
+			b[8] = (unsigned char)((b[8] & 0x3f) | 0x80); // RFC 4122 variant
+
+			std::ostringstream out;
+			out << std::hex << std::setfill('0');
+			for (int i = 0; i < 16; ++i)
+			{
+				if (i == 4 || i == 6 || i == 8 || i == 10)
+					out << '-';
+				out << std::setw(2) << (unsigned int)b[i];
+			}
+			return out.str();
+		}
+
+		static std::mutex &hprUUIDMutex()
+		{
+			static std::mutex m;
+			return m;
+		}
+
+		static std::string &hprUUIDCache()
+		{
+			static std::string value;
+			return value;
+		}
+
+		static std::string hprLoadOrCreateUUID()
+		{
+			const char *envUUID = std::getenv("HPR_FEEDER_UUID");
+			if (envUUID)
+			{
+				std::string value = hprLower(hprTrim(envUUID));
+				if (hprValidUUID(value))
+					return value;
+			}
+
+			std::lock_guard<std::mutex> lock(hprUUIDMutex());
+			if (!hprUUIDCache().empty())
+				return hprUUIDCache();
+
+			std::vector<std::string> paths;
+			const char *envFile = std::getenv("HPR_FEEDER_UUID_FILE");
+			if (envFile && *envFile)
+				paths.push_back(envFile);
+#ifndef _WIN32
+			// /data is the preferred persistent volume for feeder containers.
+			paths.push_back("/data/hpr-feeder.uuid");
+			const char *home = std::getenv("HOME");
+			if (home && *home)
+				paths.push_back(std::string(home) + "/.aiscatcher-hpr-feeder.uuid");
+#else
+			const char *local = std::getenv("LOCALAPPDATA");
+			if (local && *local)
+				paths.push_back(std::string(local) + "\\AIS-catcher-hpr-feeder.uuid");
+#endif
+			paths.push_back(".hpr-feeder.uuid");
+
+			for (std::vector<std::string>::const_iterator it = paths.begin(); it != paths.end(); ++it)
+			{
+				std::string value = hprReadUUID(*it);
+				if (!value.empty())
+				{
+					hprUUIDCache() = value;
+					return value;
+				}
+			}
+
+			std::string generated = hprGenerateUUID();
+			for (std::vector<std::string>::const_iterator it = paths.begin(); it != paths.end(); ++it)
+			{
+				if (hprWriteUUID(*it, generated))
+				{
+					hprUUIDCache() = generated;
+					return generated;
+				}
+			}
+
+			// Feeding must not stop because the state directory is read-only. The UUID
+			// remains stable for this process; operators can set HPR_FEEDER_UUID_FILE
+			// to a persistent writable path for immutable identity across restarts.
+			hprUUIDCache() = generated;
+			return generated;
+		}
+
+		bool isHPRTarget() const
+		{
+			if (fmt != MessageFormat::NMEA)
+				return false;
+
+			std::string mode = "auto";
+			const char *envMode = std::getenv("HPR_FEEDER_MODE");
+			if (envMode && *envMode)
+				mode = hprLower(hprTrim(envMode));
+
+			if (mode == "off" || mode == "false" || mode == "0" || mode == "no")
+				return false;
+			if (mode == "on" || mode == "true" || mode == "1" || mode == "yes")
+				return true;
+
+			std::string h = hprLower(hprTrim(host));
+			while (!h.empty() && h[h.size() - 1] == '.')
+				h.erase(h.size() - 1);
+			if (h == "hpradar.com")
+				return true;
+			static const std::string suffix = ".hpradar.com";
+			return h.size() > suffix.size() && h.compare(h.size() - suffix.size(), suffix.size(), suffix) == 0;
+		}
+
+		void SendHPRIdentityIfNeeded()
+		{
+			if (sock == -1 || address == NULL || !isHPRTarget())
+				return;
+
+			if (uuid.empty())
+				uuid = hprLoadOrCreateUUID();
+			if (!hprValidUUID(uuid))
+				return;
+
+			// RESET recreates the UDP socket/NAT mapping. Force the initial identity
+			// burst again whenever that epoch changes.
+			if (reset > 0 && hpr_identity_epoch != last_reconnect)
+			{
+				hpr_identity_epoch = last_reconnect;
+				hpr_identity_last = 0;
+				hpr_identity_burst = 0;
+			}
+
+			const long now = (long)std::time(NULL);
+			if (hpr_identity_burst >= 3 && (now - hpr_identity_last) < 30)
+				return;
+
+			const std::string frame = "HPR1|" + hprLower(uuid) + "\r\n";
+			stats.bytes_out += frame.length();
+			sendto(sock, frame.c_str(), (int)frame.length(), 0, address->ai_addr, (int)address->ai_addrlen);
+			hpr_identity_last = now;
+			if (hpr_identity_burst < 3)
+				++hpr_identity_burst;
+		}
+
 		void ResetIfNeeded();
 
 	public:
@@ -161,6 +376,7 @@ namespace IO
 		void Stop();
 		void SendTo(std::string str)
 		{
+			SendHPRIdentityIfNeeded();
 			stats.bytes_out += str.length();
 			sendto(sock, str.c_str(), (int)str.length(), 0, address->ai_addr, (int)address->ai_addrlen);
 		}
@@ -225,7 +441,7 @@ namespace IO
 	public:
 		TCPlistenerStreamer() : OutputMessage("TCP Listener") { fmt = MessageFormat::NMEA; }
 
-		virtual ~TCPlistenerStreamer() {};
+		virtual ~TCPlistenerStreamer() {}
 
 		Setting &Set(std::string option, std::string arg);
 
