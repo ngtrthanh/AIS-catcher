@@ -1,0 +1,19 @@
+name: HPR identity CI
+
+on:
+  push:
+    branches:
+      - 'agent/hpr-udp-identity'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build AIS-catcher
+        run: docker build --build-arg RUN_NUMBER=0 -t ais-catcher:hpr-identity .
